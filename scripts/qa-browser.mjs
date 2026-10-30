@@ -14,6 +14,7 @@ page.on('console', message => { if (message.type() === 'error') errors.push(mess
 page.setDefaultTimeout(12000);
 const result = { url, screens: [], interactions: [] };
 async function screen(name) {
+  await page.evaluate(() => window.scrollTo(0, 0));
   try {
     await page.waitForFunction(() => document.documentElement.scrollWidth <= window.innerWidth + 1, null, { timeout: 2000 });
   } catch (error) {
@@ -65,6 +66,28 @@ try {
   result.interactions.push('reference, spatial mode, inactive weights, metric reweighting, player search, CSV download');
   await screen('recruitment-desktop');
   await view('Match lab');
+  await page.getByRole('combobox', { name: 'Historical match', exact: true }).selectOption({ label: 'England 6-2 Iran · 2022-11-21' });
+  await page.getByRole('combobox', { name: 'Team', exact: true }).selectOption('England');
+  await page.getByRole('combobox', { name: 'Lane type', exact: true }).selectOption('all');
+  const zone = page.locator('.within-zone-activity rect');
+  await zone.waitFor();
+  assert.ok(Number(await zone.getAttribute('width')) > 17);
+  assert.ok(Number(await zone.getAttribute('height')) > 16);
+  const summary = page.getByRole('region', { name: 'Selected attacking pattern' });
+  assert.match(await summary.innerText(), /8 successful carries within the attacking third/);
+  assert.equal(await page.locator('.within-zone-activity text').textContent(), '8');
+  await page.getByRole('checkbox', { name: 'All filtered lanes', exact: true }).uncheck();
+  assert.equal(await page.locator('.background-lanes .lane-map-target').count(), 0);
+  await screen('england-zone-desktop');
+  await page.locator('.pitch-section:visible').screenshot({ path: `${out}/england-zone-detail.png` });
+  await page.getByRole('checkbox', { name: 'All filtered lanes', exact: true }).check();
+  await page.locator('.background-lanes .lane-map-target').filter({ has: page.locator('.other-zone-route') }).first().focus();
+  await page.keyboard.press('Enter');
+  await page.locator('.between-zone-route').waitFor();
+  const line = page.locator('.between-zone-route line').last();
+  assert.ok(Math.hypot(Number(await line.getAttribute('x2')) - Number(await line.getAttribute('x1')), Number(await line.getAttribute('y2')) - Number(await line.getAttribute('y1'))) > 0);
+  await screen('england-route-desktop');
+  result.interactions.push('England same-zone regression, visible zone/count, selected-only toggle, keyboard selection of a nonzero route');
   await page.getByRole('combobox', { name: 'Historical match', exact: true }).selectOption({ label: 'Argentina 3-3 France · 2022-12-18' });
   await page.getByRole('combobox', { name: 'Team', exact: true }).selectOption('France');
   await page.getByRole('combobox', { name: 'Lane type', exact: true }).selectOption('pass');

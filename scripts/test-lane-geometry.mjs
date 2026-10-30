@@ -1,0 +1,21 @@
+import { readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+
+const source = await readFile(new URL('../src/laneGeometry.ts', import.meta.url), 'utf8');
+const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } });
+const { isSameZone, laneCell, laneDescription, zoneLabel, LANE_CELL_WIDTH, LANE_CELL_HEIGHT } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const england = { type: 'carry', count: 8, start: [78.75, 8.5], end: [78.75, 8.5] };
+assert.equal(isSameZone(england), true);
+assert.equal(isSameZone({ start: [71, 1], end: [86, 16] }), true);
+assert.equal(isSameZone({ start: [61.25, 8.5], end: [78.75, 8.5] }), false);
+assert.deepEqual(laneCell([105, 68]), { column: 5, row: 3, x: 87.5, y: 51 });
+assert.equal(laneCell([0, 0]).x, 0);
+assert.equal(laneCell([-1, -1]).row, 0);
+assert.throws(() => laneCell([NaN, 0]), /finite/);
+assert.equal(zoneLabel(england.start), 'attacking third, upper channel');
+assert.match(laneDescription(england), /^8 successful carries within the attacking third/);
+assert.match(laneDescription({ type: 'pass', count: 6, start: [8.75, 25.5], end: [43.75, 25.5] }), /^6 successful passes from the defensive third.*to the middle third/);
+assert.equal(LANE_CELL_WIDTH * 6, 105);
+assert.equal(LANE_CELL_HEIGHT * 4, 68);
+console.log('12 lane geometry assertions passed');

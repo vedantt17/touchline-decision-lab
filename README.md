@@ -11,7 +11,7 @@ Built by Vedant Tiwari with AI coding assistance and established open-source foo
 1. Start in **Overview** for dataset coverage, role distribution, the learned xT surface, and a filterable player-discovery table. Global player search opens a reference directly in Recruitment. Saved players and exports work across the workspace.
 2. Choose a reference in **Recruitment**. Compare same-role candidates with an explicit minutes floor. Switch between a ten-metric profile and a 60-bin spatial fingerprint.
 3. Change one group weight, compare profiles, and inspect the source-linked research note. Save candidates locally or export the current comparison as CSV.
-4. Open **Match lab** to compare published team passing/carrying lanes with the learned xT surface. Lanes aggregate at least five moves; they are not event replays.
+4. Open **Match lab** to compare published team passing/carrying patterns. Same-zone activity is a highlighted 17.5 x 17 m cell with its action count; between-zone movements are arrows. The selected-pattern summary gives the time window and net xT. Groups contain at least five moves, not individual event replays.
 5. Open **Tracking**, play the real SkillCorner excerpt, and inspect Home control alongside detected/extrapolated player flags. It is a different match from the event data.
 6. Open **Evidence** for chronological splits, baselines, checks, provider scope, and limitations.
 
@@ -97,6 +97,7 @@ Endpoints: `/health`, `/api/players`, `/api/players/{id}/neighbors`, `/api/evide
 ```bash
 python -m pytest -q
 npm run build
+npm run test:geometry
 npm audit --omit=dev
 npm run test:browser
 ```
