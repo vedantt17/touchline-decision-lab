@@ -67,6 +67,15 @@ try {
   await page.getByRole('heading', { name: 'No profiles meet these filters', exact: true }).waitFor();
   result.interactions.push('mobile views, empty search result, evidence support grid');
   assert.deepEqual(errors, [], 'Browser errors');
+  const failed = await context.newPage();
+  await failed.route('**/data/workspace.json', route => route.abort());
+  await failed.goto(url, { waitUntil: 'domcontentloaded' });
+  await failed.getByRole('heading', { name: 'Workspace not available', exact: true }).waitFor();
+  await failed.unroute('**/data/workspace.json');
+  await failed.getByRole('button', { name: 'Retry workspace', exact: true }).click();
+  await failed.getByRole('heading', { name: 'Player recruitment', exact: true }).waitFor();
+  await failed.close();
+  result.interactions.push('missing dataset shows explicit error; retry loads real artifact without fabricated fallback');
   result.errors = errors;
   result.passed = true;
   await writeFile(`${out}/checks.json`, JSON.stringify(result, null, 2));

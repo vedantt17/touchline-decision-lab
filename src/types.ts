@@ -8,7 +8,7 @@ export interface Player {
 }
 export interface Action { id: string; player: string; playerId: number; team: string; minute: number; period: number; type: string; start: [number,number]; end: [number,number]; xt: number; success: boolean; count: number }
 export interface Match { id: number; date: string; home: string; away: string; score: string; stage: string; actions: Action[]; teamStats: {team: string; shots: number; xg: number; xt: number; passes: number; completions: number; left: number; center: number; right: number}[] }
-export interface TrackingPlayer {id: string; team: string; number: string; x: number; y: number; vx: number; vy: number}
+export interface TrackingPlayer {id: string; team: string; number: string; x: number; y: number; vx: number; vy: number; detected?: boolean}
 export interface TrackingFrame {t: number; players: TrackingPlayer[]; ball: [number,number] | null; control: number[][]; massError?: number}
 export interface Tracking {
  source: string; dataset: string; label: string; fps: number; pitch: [number,number];
