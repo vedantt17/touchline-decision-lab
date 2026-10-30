@@ -1,0 +1,8 @@
+socceraction==1.5.3
+multimethod<2
+kloppy>=3.18,<4
+scikit-learn>=1.4,<1.7
+pytest>=8,<9
+fastapi>=0.115,<1
+uvicorn>=0.32,<1
+httpx>=0.27,<1

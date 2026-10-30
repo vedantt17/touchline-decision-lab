@@ -1,0 +1,15 @@
+.venv/
+node_modules/
+dist/
+data/raw/
+data/processed/*.db
+__pycache__/
+.pytest_cache/
+.env*
+!.env.example
+.vercel/
+artifacts/browser/
+*.log
+.playwright-cli/
+output/
+*.tsbuildinfo
