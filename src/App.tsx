@@ -1,12 +1,14 @@
-import { Fragment, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Activity, ArrowDownToLine, ArrowRight, Bookmark, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleAlert, Clipboard, Database, FileCheck2, Focus, GitCompareArrows, Layers, Pause, Play, RotateCcw, Search, ShieldCheck, SlidersHorizontal, Users, X } from 'lucide-react';
 import type { Action, Dataset, Match } from './types';
 import { clamp, comparePlayers, count, csvCell, download, Empty, Field, finite, fmt, GridHeatmap, IconButton, interval, Pitch, ProfileBars, SectionHead, SourceLink, Stat, xtFeature, type SimilarityMode } from './components';
+import { LayoutDashboard, Menu, PanelLeftClose, ChevronRight as BreadcrumbArrow, ExternalLink } from 'lucide-react';
+import Overview from './Overview';
 
-type Tab = 'recruitment' | 'match' | 'tracking' | 'evidence';
-const tabs = [{ id: 'recruitment', label: 'Recruitment', icon: Users }, { id: 'match', label: 'Match lab', icon: GitCompareArrows }, { id: 'tracking', label: 'Tracking', icon: Activity }, { id: 'evidence', label: 'Evidence', icon: FileCheck2 }] as const;
+type Tab = 'overview' | 'recruitment' | 'match' | 'tracking' | 'evidence';
+const tabs = [{ id: 'overview', label: 'Overview', icon: LayoutDashboard }, { id: 'recruitment', label: 'Recruitment', icon: Users }, { id: 'match', label: 'Match lab', icon: GitCompareArrows }, { id: 'tracking', label: 'Tracking', icon: Activity }, { id: 'evidence', label: 'Evidence', icon: FileCheck2 }] as const;
 const watchKey = 'touchline.watchlist.v1';
-const tabFromHash = (): Tab => tabs.find(t => `#${t.id}` === window.location.hash)?.id ?? 'recruitment';
+const tabFromHash = (): Tab => tabs.find(t => `#${t.id}` === window.location.hash)?.id ?? 'overview';
 
 function readWatchlist(): number[] {
   try { const value: unknown = JSON.parse(localStorage.getItem(watchKey) ?? '[]'); return Array.isArray(value) ? [...new Set(value.filter(finite))] : []; } catch { return []; }
@@ -33,6 +35,19 @@ export default function App() {
   const [storageError, setStorageError] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  const [globalQuery, setGlobalQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [requestedReferenceId, setRequestedReferenceId] = useState<number | null>(null);
+  const [requestedMatchId, setRequestedMatchId] = useState<number | null>(null);
+  const [referenceRequestCount, setReferenceRequestCount] = useState(0);
+  const [matchRequestCount, setMatchRequestCount] = useState(0);
+  const [watchlistRequested, setWatchlistRequested] = useState(0);
+  const searchRoot = useRef<HTMLFormElement>(null);
+  const searchResults = useMemo(() => {
+    const query = globalQuery.trim().toLocaleLowerCase();
+    return query && data ? data.players.filter(p => `${p.name} ${p.team}`.toLocaleLowerCase().includes(query)).slice(0, 7) : [];
+  }, [data, globalQuery]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -52,27 +67,71 @@ export default function App() {
     window.addEventListener('storage', sync); return () => window.removeEventListener('storage', sync);
   }, []);
   useEffect(() => {
+    const dismiss = (event: PointerEvent) => { if (searchRoot.current && !searchRoot.current.contains(event.target as Node)) setSearchOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setNavOpen(false); setSearchOpen(false); } };
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', escape);
+    return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', escape); };
+  }, []);
+  useEffect(() => {
+    if (!navOpen) return;
+    const sidebar = document.querySelector<HTMLElement>('.workspace-sidebar');
+    const previous = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    sidebar?.querySelector<HTMLButtonElement>('.sidebar-close')?.focus();
+    const trap = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || !sidebar) return;
+      const controls = Array.from(sidebar.querySelectorAll<HTMLElement>('button, a[href]')).filter(element => element.getClientRects().length);
+      const first = controls[0], last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    const desktop = window.matchMedia('(min-width: 821px)');
+    const collapse = () => { if (desktop.matches) setNavOpen(false); };
+    document.addEventListener('keydown', trap);
+    desktop.addEventListener('change', collapse);
+    return () => { document.removeEventListener('keydown', trap); desktop.removeEventListener('change', collapse); document.body.style.overflow = previousOverflow; if (previous?.getClientRects().length) previous.focus(); };
+  }, [navOpen]);
+  useEffect(() => {
     const navigate = () => setTab(tabFromHash());
     window.addEventListener('hashchange', navigate);
     return () => window.removeEventListener('hashchange', navigate);
   }, []);
   const toggleWatch = (id: number) => setWatchlist(list => list.includes(id) ? list.filter(n => n !== id) : [...list, id]);
-  const setView = (view: Tab) => { setTab(view); window.history.replaceState(null, '', `#${view}`); };
+  const setView = (view: Tab) => { setTab(view); setNavOpen(false); window.history.replaceState(null, '', `#${view}`); };
   const goEvidence = () => { setView('evidence'); window.scrollTo({ top: 0, behavior: 'instant' }); };
+  const openPlayer = (id: number) => { setRequestedReferenceId(id); setReferenceRequestCount(n => n + 1); setView('recruitment'); setSearchOpen(false); setGlobalQuery(''); window.scrollTo({ top: 0, behavior: 'instant' }); };
+  const openMatch = (id: number) => { setRequestedMatchId(id); setMatchRequestCount(n => n + 1); setView('match'); window.scrollTo({ top: 0, behavior: 'instant' }); };
+  const activeLabel = tabs.find(t => t.id === tab)?.label ?? 'Overview';
+  const passedChecks = data?.evidence.checks.filter(c => c.passed).length ?? 0;
 
   return <div className="app-shell">
-    <header className="app-header"><div className="brand"><span className="brand-mark" aria-hidden="true"><span /><span /><span /></span><strong>Touchline<span className="brand-period">.</span></strong><span className="brand-descriptor">Decision lab</span></div><div className="header-meta"><span className="status-dot" />Public-data research<span className="header-divider" /><span className="mono">{data ? `BUILD ${data.version}` : 'WORKSPACE'}</span></div></header>
-    <div className="context-strip"><span><Database size={13} />{data?.evidence.competition || 'Historical competition'}<span className="context-separator">/</span>Historical scope only</span><button onClick={goEvidence}>Independent research · No current LA Galaxy affiliation<ArrowRight size={13} /></button></div>
-    <nav className="tabs" aria-label="Workspace views">{tabs.map(({ id, label, icon: Icon }) => <button key={id} aria-label={label} onClick={() => setView(id)} className={tab === id ? 'active' : ''} aria-current={tab === id ? 'page' : undefined}><Icon size={17} /><span>{label}</span>{id === 'recruitment' && watchlist.length > 0 && <span className="nav-count">{watchlist.length}</span>}</button>)}<span className="nav-end">SOCCER OPERATIONS / RESEARCH</span></nav>
-    <main id="main-content">
+    {navOpen && <button className="nav-backdrop" aria-label="Close navigation" onClick={() => setNavOpen(false)} />}
+    <aside className={`workspace-sidebar ${navOpen ? 'is-open' : ''}`} aria-label="Workspace navigation">
+      <div className="sidebar-brand"><span className="brand-mark" aria-hidden="true"><span /><span /><span /></span><div><strong>Touchline<span>.</span></strong><small>Football intelligence</small></div><IconButton icon={PanelLeftClose} label="Close sidebar" className="sidebar-close" onClick={() => setNavOpen(false)} /></div>
+      <div className="sidebar-workspace"><span className="workspace-symbol"><Focus size={18} /></span><span><strong>Research workspace</strong><small>Independent portfolio</small></span></div>
+      <span className="nav-section-label">ANALYSIS</span>
+      <nav className="sidebar-nav" aria-label="Workspace views">{tabs.map(({ id, label, icon: Icon }) => <button key={id} aria-label={label} onClick={() => setView(id)} className={tab === id ? 'active' : ''} aria-current={tab === id ? 'page' : undefined}><Icon size={18} strokeWidth={1.8} /><span>{label}</span>{tab === id && <span className="nav-active-dot" />}</button>)}</nav>
+      <div className="sidebar-shortlist"><span className="nav-section-label">COLLECTIONS</span><button onClick={() => { setWatchlistRequested(n => n + 1); setView('recruitment'); }}><Bookmark size={18} strokeWidth={1.8} /><span>Saved players</span><span className="nav-count">{watchlist.length}</span></button></div>
+      <div className="sidebar-bottom"><button className="dataset-status" onClick={goEvidence}><span className="dataset-status-icon"><ShieldCheck size={18} /></span><span><strong>{data ? `${passedChecks} of ${data.evidence.checks.length} checks passed` : 'Loading dataset'}</strong><small>Source & model validation</small></span><ArrowRight size={14} /></button><div className="sidebar-version"><span className="status-dot" />Public-data research<span>v{data?.version ?? '1.0'}</span></div></div>
+    </aside>
+    <div className="workspace-content">
+    <header className="workspace-header"><div className="workspace-breadcrumb"><IconButton icon={Menu} label="Open navigation" className="mobile-menu" onClick={() => setNavOpen(true)} /><span>Workspace</span><BreadcrumbArrow size={14} /><strong>{activeLabel}</strong></div>
+      <form className="global-search" ref={searchRoot} role="search" onSubmit={event => { event.preventDefault(); if (searchResults[0]) openPlayer(searchResults[0].id); }}><Search size={17} /><input aria-label="Find a player across the workspace" placeholder="Find a player or team..." value={globalQuery} onFocus={() => setSearchOpen(true)} onChange={e => { setGlobalQuery(e.target.value); setSearchOpen(true); }} autoComplete="off" aria-expanded={searchOpen && !!globalQuery.trim()} aria-controls="global-player-results" />{globalQuery && <IconButton icon={X} label="Clear global search" onClick={() => setGlobalQuery('')} />}{searchOpen && globalQuery.trim() && <div className="global-search-results" id="global-player-results"><span className="search-result-heading">PLAYER PROFILES</span>{searchResults.length ? searchResults.map(player => <button type="button" key={player.id} onClick={() => openPlayer(player.id)}><span className="player-initials">{player.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</span><span><strong>{player.name}</strong><small>{player.team} · {player.role}</small></span><ArrowRight size={14} /></button>) : <p>No players found for “{globalQuery}”.</p>}</div>}</form>
+      <div className="workspace-header-actions"><button className="dataset-switch" onClick={goEvidence} title="View World Cup 2022 dataset evidence"><Database size={15} /><span>World Cup 2022</span><ChevronDown size={13} /></button><a className="header-doc-link" href="https://github.com/vedantt17/touchline-decision-lab" target="_blank" rel="noreferrer" title="Open project documentation" aria-label="Open project documentation"><ExternalLink size={17} /></a></div>
+    </header>
+    <main id="main-content" className="workspace-main">
       {loading ? <div className="loading-state" role="status"><span className="loading-line" /><Database size={28} /><h1>Loading research workspace</h1><p>Reading the versioned public-data build.</p></div> : error ? <div className="load-error"><Empty title="Workspace not available" error>{error} No sample statistics have been substituted.</Empty><button className="button primary" onClick={() => setAttempt(n => n + 1)}><RotateCcw size={15} />Retry workspace</button></div> : data ? <>
-        <div hidden={tab !== 'recruitment'}><Recruitment data={data} watchlist={watchlist} toggleWatch={toggleWatch} evidence={goEvidence} storageError={storageError} /></div>
-        <div hidden={tab !== 'match'}><MatchLab data={data} /></div>
+        <div hidden={tab !== 'overview'} className="view-panel"><Overview data={data} onPlayer={openPlayer} onMatch={openMatch} onNavigate={setView} watchlist={watchlist} toggleWatch={toggleWatch} /></div>
+        <div hidden={tab !== 'recruitment'} className="view-panel"><Recruitment data={data} watchlist={watchlist} toggleWatch={toggleWatch} evidence={goEvidence} storageError={storageError} requestedReferenceId={requestedReferenceId} watchlistRequested={watchlistRequested} referenceRequestCount={referenceRequestCount} /></div>
+        <div hidden={tab !== 'match'} className="view-panel"><MatchLab data={data} requestedMatchId={requestedMatchId} matchRequestCount={matchRequestCount} /></div>
         <div hidden={tab !== 'tracking'}><TrackingLab data={data} active={tab === 'tracking'} /></div>
         <div hidden={tab !== 'evidence'}><EvidenceView data={data} /></div>
       </> : null}
     </main>
     <footer className="app-footer"><div className="source-credit"><span className="source-logo">{!logoLoaded && <strong>StatsBomb</strong>}{!logoFailed && <img src={new URL('data/statsbomb-logo.png', document.baseURI).href} alt={logoLoaded ? 'StatsBomb' : ''} style={{ display: logoLoaded ? 'block' : 'none' }} onLoad={() => setLogoLoaded(true)} onError={() => setLogoFailed(true)} />}</span><span>Public data attribution<SourceLink href="https://github.com/statsbomb/open-data">StatsBomb Open Data</SourceLink></span></div><p>Aggregated events only. Tracking: separate SkillCorner sample.<br />Research demonstration, not a player recommendation or calibrated forecast.</p><button className="footer-link" onClick={goEvidence}><ShieldCheck size={14} />Sources & limitations<ArrowRight size={14} /></button></footer>
+    </div>
   </div>;
 }
 
@@ -80,7 +139,7 @@ function PageHead({ index, title, subtitle, children }: { index: string; title: 
   return <div className="page-head"><div><div className="eyebrow page-kicker">{index} / TOUCHLINE WORKSPACE</div><h1>{title}</h1><p>{subtitle}</p></div><div className="page-actions">{children}</div></div>;
 }
 
-function Recruitment({ data, watchlist, toggleWatch, evidence, storageError }: { data: Dataset; watchlist: number[]; toggleWatch: (id: number) => void; evidence: () => void; storageError: boolean }) {
+function Recruitment({ data, watchlist, toggleWatch, evidence, storageError, requestedReferenceId, watchlistRequested, referenceRequestCount }: { data: Dataset; watchlist: number[]; toggleWatch: (id: number) => void; evidence: () => void; storageError: boolean; requestedReferenceId: number | null; watchlistRequested: number; referenceRequestCount: number }) {
   const [referenceId, setReferenceId] = useState(data.players[0]?.id ?? 0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [mode, setMode] = useState<SimilarityMode>('metric');
@@ -94,6 +153,8 @@ function Recruitment({ data, watchlist, toggleWatch, evidence, storageError }: {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const [weights, setWeights] = useState<Record<string, number>>({});
+  useEffect(() => { if (requestedReferenceId !== null) { setReferenceId(requestedReferenceId); setSelectedId(null); setExpanded(null); setQuery(''); setTeam('all'); setOnlySaved(false); setSameRole(true); } }, [requestedReferenceId, referenceRequestCount]);
+  useEffect(() => { if (watchlistRequested > 0) { setOnlySaved(true); setQuery(''); setTeam('all'); setSameRole(false); setMinMinutes(0); } }, [watchlistRequested]);
   const groups = useMemo(() => [...new Set(data.features.map(f => f.group))], [data.features]);
   const teams = useMemo(() => [...new Set(data.players.map(p => p.team))].sort(), [data.players]);
   const reference = data.players.find(p => p.id === referenceId) ?? data.players[0];
@@ -163,8 +224,9 @@ function publishedLanes(match?: Match): AggregateLane[] {
   return (match?.actions ?? []).filter((a: AggregateLane) => a.playerId === 0 && a.player === 'Team aggregate' && Number.isInteger(a.count) && (a.count ?? 0) >= 5 && finite(a.xt) && finite(a.minute) && a.minute % 15 === 0 && ['pass', 'carry'].includes(a.type.toLowerCase()) && a.start?.length === 2 && a.end?.length === 2 && [...a.start, ...a.end].every(finite) && a.start[0] >= 0 && a.start[0] <= 105 && a.end[0] >= 0 && a.end[0] <= 105 && a.start[1] >= 0 && a.start[1] <= 68 && a.end[1] >= 0 && a.end[1] <= 68);
 }
 
-function MatchLab({ data }: { data: Dataset }) {
+function MatchLab({ data, requestedMatchId, matchRequestCount }: { data: Dataset; requestedMatchId: number | null; matchRequestCount: number }) {
   const [matchId, setMatchId] = useState(data.matches[0]?.id ?? 0);
+  useEffect(() => { if (requestedMatchId !== null) setMatchId(requestedMatchId); }, [requestedMatchId, matchRequestCount]);
   const match = data.matches.find(m => m.id === matchId) ?? data.matches[0];
   const [teamChoice, setTeamChoice] = useState('');
   const team = match && [match.home, match.away].includes(teamChoice) ? teamChoice : match?.home ?? '';

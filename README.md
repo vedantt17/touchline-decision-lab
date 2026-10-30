@@ -8,13 +8,14 @@ Built by Vedant Tiwari with AI coding assistance and established open-source foo
 
 ## A two-minute review
 
-1. Choose a reference in **Recruitment**. Compare same-role candidates with an explicit minutes floor. Switch between a ten-metric profile and a 60-bin spatial fingerprint.
-2. Change one group weight, compare profiles, and inspect the source-linked research note. Save candidates locally or export the current comparison as CSV.
-3. Open **Match lab** to compare published team passing/carrying lanes with the learned xT surface. Lanes aggregate at least five moves; they are not event replays.
-4. Open **Tracking**, play the real SkillCorner excerpt, and inspect Home control alongside detected/extrapolated player flags. It is a different match from the event data.
-5. Open **Evidence** for chronological splits, baselines, checks, provider scope, and limitations.
+1. Start in **Overview** for dataset coverage, role distribution, the learned xT surface, and a filterable player-discovery table. Global player search opens a reference directly in Recruitment. Saved players and exports work across the workspace.
+2. Choose a reference in **Recruitment**. Compare same-role candidates with an explicit minutes floor. Switch between a ten-metric profile and a 60-bin spatial fingerprint.
+3. Change one group weight, compare profiles, and inspect the source-linked research note. Save candidates locally or export the current comparison as CSV.
+4. Open **Match lab** to compare published team passing/carrying lanes with the learned xT surface. Lanes aggregate at least five moves; they are not event replays.
+5. Open **Tracking**, play the real SkillCorner excerpt, and inspect Home control alongside detected/extrapolated player flags. It is a different match from the event data.
+6. Open **Evidence** for chronological splits, baselines, checks, provider scope, and limitations.
 
-![Recruitment workspace](docs/images/recruitment-desktop.png)
+![Workspace overview](docs/images/overview-desktop.png)
 
 ## What is implemented
 

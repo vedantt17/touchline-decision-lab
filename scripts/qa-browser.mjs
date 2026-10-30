@@ -14,12 +14,43 @@ page.on('console', message => { if (message.type() === 'error') errors.push(mess
 page.setDefaultTimeout(12000);
 const result = { url, screens: [], interactions: [] };
 async function screen(name) {
+  try {
+    await page.waitForFunction(() => document.documentElement.scrollWidth <= window.innerWidth + 1, null, { timeout: 2000 });
+  } catch (error) {
+    console.log(JSON.stringify(await page.evaluate(() => ({width: innerWidth, scrollWidth: document.documentElement.scrollWidth, elements: [...document.querySelectorAll('body *')].map(e => ({tag: e.tagName, class: e.getAttribute('class'), right: e.getBoundingClientRect().right, width: e.getBoundingClientRect().width})).filter(e => e.right > innerWidth + 2).slice(0, 25)})), null, 2));
+    await page.screenshot({ path: `${out}/overflow-${name}.png`, fullPage: true });
+    throw error;
+  }
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false, `${name}: page overflows`);
   await page.screenshot({ path: `${out}/${name}.png`, fullPage: true, animations: 'disabled', timeout: 15000 });
   result.screens.push(name);
 }
+async function view(name) {
+  const menu = page.getByRole('button', { name: 'Open navigation', exact: true });
+  if (await menu.isVisible()) await menu.click();
+  await page.getByRole('button', { name, exact: true }).click();
+}
 try {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Workspace overview', exact: true }).waitFor();
+  await screen('overview-desktop');
+  await page.getByRole('combobox', { name: 'Metric', exact: true }).selectOption('npxg90');
+  await page.getByRole('combobox', { name: 'Minimum minutes', exact: true }).selectOption('450');
+  const save = page.getByRole('button', { name: /^Save .* to watchlist$/ }).first();
+  await save.click();
+  assert.equal(await page.getByRole('button', { name: /^Remove .* from watchlist$/ }).first().getAttribute('aria-pressed'), 'true');
+  await page.getByRole('button', { name: /Saved players/ }).click();
+  assert.equal(await page.getByRole('button', { name: /Watchlist/ }).getAttribute('aria-pressed'), 'true');
+  await view('Overview');
+  const [report] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export report', exact: true }).click()]);
+  await report.saveAs(`${out}/overview.csv`);
+  await page.getByRole('button', { name: 'Inspect match', exact: true }).click();
+  assert.equal(await page.getByRole('combobox', { name: 'Historical match', exact: true }).inputValue(), '3869685');
+  await view('Overview');
+  await page.getByRole('textbox', { name: 'Find a player across the workspace' }).fill('Amrabat');
+  await page.getByRole('button', { name: /Sofyan Amrabat/ }).click();
+  assert.equal(await page.getByRole('combobox', { name: 'Reference player', exact: true }).inputValue(), '5234');
+  result.interactions.push('overview metrics, exposure filter, overview CSV, spotlight match deep link, global player search');
   await page.getByRole('heading', { name: 'Player recruitment', exact: true }).waitFor();
   await page.getByRole('combobox', { name: 'Reference player', exact: true }).selectOption('5234');
   await page.getByRole('combobox', { name: 'Comparison model', exact: true }).selectOption('spatial');
@@ -33,13 +64,13 @@ try {
   await download.saveAs(`${out}/shortlist.csv`);
   result.interactions.push('reference, spatial mode, inactive weights, metric reweighting, player search, CSV download');
   await screen('recruitment-desktop');
-  await page.getByRole('button', { name: 'Match lab', exact: true }).click();
+  await view('Match lab');
   await page.getByRole('combobox', { name: 'Historical match', exact: true }).selectOption({ label: 'Argentina 3-3 France · 2022-12-18' });
   await page.getByRole('combobox', { name: 'Team', exact: true }).selectOption('France');
   await page.getByRole('combobox', { name: 'Lane type', exact: true }).selectOption('pass');
   await screen('match-desktop');
   result.interactions.push('different match, away-team filter, lane-type filter');
-  await page.getByRole('button', { name: 'Tracking', exact: true }).click();
+  await view('Tracking');
   const timeline = page.getByRole('slider', { name: /Tracking timeline/ });
   assert.equal(await timeline.inputValue(), '0');
   await page.getByRole('button', { name: 'Next tracking frame', exact: true }).click();
@@ -51,18 +82,18 @@ try {
   await page.getByRole('checkbox', { name: 'Velocity', exact: true }).check();
   await screen('tracking-desktop');
   result.interactions.push('tracking frame step, timed playback, pause, velocity overlay');
-  await page.getByRole('button', { name: 'Evidence', exact: true }).click();
+  await view('Evidence');
   await page.getByRole('button', { name: 'Support', exact: true }).click();
   await screen('evidence-desktop');
-  for (const width of [390, 768]) {
+  for (const width of [320, 390, 768]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const label of ['Recruitment', 'Match lab', 'Tracking', 'Evidence']) {
-      await page.getByRole('button', { name: label, exact: true }).click();
+    for (const label of ['Overview', 'Recruitment', 'Match lab', 'Tracking', 'Evidence']) {
+      await view(label);
       await screen(`${label.toLowerCase().replaceAll(' ', '-')}-${width}`);
     }
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Recruitment', exact: true }).click();
+  await view('Recruitment');
   await page.getByPlaceholder('Search player or team').fill('not-a-real-player-92714');
   await page.getByRole('heading', { name: 'No profiles meet these filters', exact: true }).waitFor();
   result.interactions.push('mobile views, empty search result, evidence support grid');
@@ -73,7 +104,7 @@ try {
   await failed.getByRole('heading', { name: 'Workspace not available', exact: true }).waitFor();
   await failed.unroute('**/data/workspace.json');
   await failed.getByRole('button', { name: 'Retry workspace', exact: true }).click();
-  await failed.getByRole('heading', { name: 'Player recruitment', exact: true }).waitFor();
+  await failed.getByRole('heading', { name: 'Workspace overview', exact: true }).waitFor();
   await failed.close();
   result.interactions.push('missing dataset shows explicit error; retry loads real artifact without fabricated fallback');
   result.errors = errors;
